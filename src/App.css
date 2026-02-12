@@ -692,6 +692,10 @@ body {
   overflow: hidden;
 }
 
+.canvas-wrap canvas {
+  touch-action: none;
+}
+
 .canvas-wrap > div {
   position: absolute;
   inset: 0;

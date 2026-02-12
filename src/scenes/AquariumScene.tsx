@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import type { TankSize, Fish, Decoration } from '@/lib/supabase'
 import { fishBehavior, type FishEntry } from '@/game/fishBehavior'
@@ -9,6 +9,7 @@ interface AquariumSceneProps {
   fish: (Fish & { fish_species?: { id: string; model_ref: string } })[]
   decorations: (Decoration & { decoration_types?: { asset_ref: string } })[]
   onDecorationMove?: () => void
+  onDecorationDrop?: (decorationId: string, x: number, y: number, z: number) => void
 }
 
 const TANK_SCALE: Record<TankSize, number> = {
@@ -17,7 +18,7 @@ const TANK_SCALE: Record<TankSize, number> = {
   large: 1.8,
 }
 
-export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProps) {
+export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }: AquariumSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<{
     scene: THREE.Scene
@@ -30,24 +31,97 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     bubbleUpdate: ((dt: number) => void) | null
   } | null>(null)
 
-  // ── Scene setup (runs once per tankSize change) ──
+  // Stable ref for the drop callback so event handlers always see latest
+  const dropRef = useRef(onDecorationDrop)
+  dropRef.current = onDecorationDrop
+
+  // Drag state refs (not React state – avoids re-renders during drag)
+  const dragState = useRef<{
+    active: boolean
+    decorationId: string | null
+    mesh: THREE.Group | null
+    floorY: number
+    startPos: THREE.Vector3
+    // For highlighting
+    originalMaterials: Map<THREE.Mesh, THREE.Material | THREE.Material[]>
+  }>({
+    active: false,
+    decorationId: null,
+    mesh: null,
+    floorY: 0,
+    startPos: new THREE.Vector3(),
+    originalMaterials: new Map(),
+  })
+
+  // Raycaster (reused)
+  const raycaster = useRef(new THREE.Raycaster())
+  const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
+  const intersectPoint = useRef(new THREE.Vector3())
+
+  // ── Helpers ──
+
+  const getMouseNDC = useCallback((e: MouseEvent | Touch) => {
+    const container = containerRef.current
+    if (!container) return null
+    const rect = container.getBoundingClientRect()
+    return new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    )
+  }, [])
+
+  /** Walk up the parent chain to find a Group with decorationId in userData */
+  const findDecorationGroup = useCallback((obj: THREE.Object3D): THREE.Group | null => {
+    let current: THREE.Object3D | null = obj
+    while (current) {
+      if (current.userData?.decorationId && current instanceof THREE.Group) {
+        return current
+      }
+      current = current.parent
+    }
+    return null
+  }, [])
+
+  /** Add highlight to a decoration mesh group */
+  const highlightMesh = useCallback((group: THREE.Group) => {
+    const ds = dragState.current
+    ds.originalMaterials.clear()
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        ds.originalMaterials.set(child, child.material)
+        const mat = (Array.isArray(child.material) ? child.material[0] : child.material) as THREE.MeshStandardMaterial
+        const highlight = mat.clone()
+        highlight.emissive = new THREE.Color(0x9333ea)
+        highlight.emissiveIntensity = 0.35
+        child.material = highlight
+      }
+    })
+  }, [])
+
+  /** Remove highlight from a decoration mesh group */
+  const unhighlightMesh = useCallback(() => {
+    const ds = dragState.current
+    ds.originalMaterials.forEach((origMat, mesh) => {
+      mesh.material = origMat
+    })
+    ds.originalMaterials.clear()
+  }, [])
+
+  // ── Scene setup ──
   useEffect(() => {
     if (!containerRef.current) return
     const container = containerRef.current
     const width = Math.max(container.clientWidth || 800, 1)
     const height = Math.max(container.clientHeight || 600, 1)
 
-    // Scene – soft light aquatic background
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xd4eaf7)
     scene.fog = new THREE.FogExp2(0xd4eaf7, 0.02)
 
-    // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100)
     camera.position.set(0, 1.5, 6.5)
     camera.lookAt(0, 0, 0)
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -57,15 +131,11 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     renderer.toneMappingExposure = 1.2
     container.appendChild(renderer.domElement)
 
-    // ── Lighting (soft, balanced) ──
+    // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.9)
     scene.add(ambient)
-
-    // Hemisphere – soft sky/ground
     const hemi = new THREE.HemisphereLight(0xd4eaf7, 0x8ab89a, 0.6)
     scene.add(hemi)
-
-    // Top-down hood lamp – moderate
     const topLight = new THREE.DirectionalLight(0xffffff, 0.8)
     topLight.position.set(0, 8, 2)
     topLight.castShadow = true
@@ -77,60 +147,40 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     topLight.shadow.camera.top = 5
     topLight.shadow.camera.bottom = -5
     scene.add(topLight)
-
-    // Gentle fill from front
     const fillLight = new THREE.DirectionalLight(0xfff8ee, 0.4)
     fillLight.position.set(2, 3, 5)
     scene.add(fillLight)
-
-    // Soft inner glow
     const innerGlow = new THREE.PointLight(0xb8ddf0, 0.5, 10, 2)
     innerGlow.position.set(0, 0.5, 0)
     scene.add(innerGlow)
 
-    // ── Tank ──
+    // Tank
     const scale = TANK_SCALE[tankSize]
     const tank = new THREE.Group()
     const tankWidth = 4 * scale
     const tankHeight = 2.5 * scale
     const tankDepth = 2.5 * scale
 
-    // Glass
     const glassGeom = new THREE.BoxGeometry(tankWidth, tankHeight, tankDepth)
     const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0xc8e6f8,
-      transparent: true,
-      opacity: 0.06,
-      side: THREE.BackSide,
-      roughness: 0.05,
-      metalness: 0.0,
-      transmission: 0.96,
-      thickness: 0.3,
+      color: 0xc8e6f8, transparent: true, opacity: 0.06,
+      side: THREE.BackSide, roughness: 0.05, metalness: 0.0,
+      transmission: 0.96, thickness: 0.3,
     })
     const glass = new THREE.Mesh(glassGeom, glassMat)
     glass.receiveShadow = true
     tank.add(glass)
 
-    // Glass edges (wireframe) – light
     const edgeGeom = new THREE.BoxGeometry(tankWidth, tankHeight, tankDepth)
     const edgeMat = new THREE.MeshBasicMaterial({
-      color: 0x90b8d0,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.12,
+      color: 0x90b8d0, wireframe: true, transparent: true, opacity: 0.12,
     })
-    const edges = new THREE.Mesh(edgeGeom, edgeMat)
-    tank.add(edges)
+    tank.add(new THREE.Mesh(edgeGeom, edgeMat))
 
-    // Water surface – light teal
     const waterGeom = new THREE.PlaneGeometry(tankWidth * 0.98, tankDepth * 0.98, 24, 24)
     const waterMat = new THREE.MeshPhysicalMaterial({
-      color: 0x7bbde0,
-      transparent: true,
-      opacity: 0.15,
-      side: THREE.DoubleSide,
-      roughness: 0.15,
-      metalness: 0.05,
+      color: 0x7bbde0, transparent: true, opacity: 0.15,
+      side: THREE.DoubleSide, roughness: 0.15, metalness: 0.05,
     })
     const water = new THREE.Mesh(waterGeom, waterMat)
     water.rotation.x = -Math.PI / 2
@@ -138,18 +188,13 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     water.receiveShadow = true
     tank.add(water)
 
-    // Sand floor
     const sandFloor = buildSandFloor(tankWidth * 0.98, tankDepth * 0.98)
     sandFloor.position.y = -tankHeight / 2 + 0.01
     tank.add(sandFloor)
 
-    // Back wall – soft light blue
     const backGeom = new THREE.PlaneGeometry(tankWidth * 0.99, tankHeight * 0.99)
     const backMat = new THREE.MeshStandardMaterial({
-      color: 0xa8d4e8,
-      roughness: 0.9,
-      metalness: 0.0,
-      side: THREE.DoubleSide,
+      color: 0xa8d4e8, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide,
     })
     const backWall = new THREE.Mesh(backGeom, backMat)
     backWall.position.z = -tankDepth / 2 + 0.01
@@ -158,28 +203,137 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
 
     scene.add(tank)
 
-    // ── Bubbles ──
     const bubbles = buildBubbleSystem(40, { w: tankWidth * 0.7, h: tankHeight, d: tankDepth * 0.7 })
-    bubbles.points.position.set(0, 0, 0)
     tank.add(bubbles.points)
 
-    // ── State ──
     const clock = new THREE.Clock()
     const fishMeshes = new Map<string, { mesh: THREE.Group; fishId: string; speciesId: string }>()
     const decorationMeshes = new Map<string, THREE.Group>()
 
     sceneRef.current = {
-      scene,
-      camera,
-      renderer,
-      tank,
-      fishMeshes,
-      decorationMeshes,
-      clock,
+      scene, camera, renderer, tank,
+      fishMeshes, decorationMeshes, clock,
       bubbleUpdate: bubbles.update,
     }
 
-    // ── Resize ──
+    // Store floorY for drag
+    dragState.current.floorY = -tankHeight / 2 + 0.02
+
+    // ── Drag & drop event handlers ──
+    const halfW = tankWidth / 2 - 0.15
+    const halfD = tankDepth / 2 - 0.15
+
+    function onPointerDown(e: PointerEvent) {
+      const ref = sceneRef.current
+      if (!ref) return
+      const ndc = getMouseNDC(e)
+      if (!ndc) return
+
+      raycaster.current.setFromCamera(ndc, ref.camera)
+
+      // Collect all meshes from decoration groups
+      const targets: THREE.Object3D[] = []
+      ref.decorationMeshes.forEach((group) => {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh) targets.push(child)
+        })
+      })
+
+      const hits = raycaster.current.intersectObjects(targets, false)
+      if (hits.length === 0) return
+
+      const hitObj = hits[0].object
+      const decoGroup = findDecorationGroup(hitObj)
+      if (!decoGroup) return
+
+      // Start drag
+      const ds = dragState.current
+      ds.active = true
+      ds.decorationId = decoGroup.userData.decorationId
+      ds.mesh = decoGroup
+      ds.startPos.copy(decoGroup.position)
+
+      // Set drag plane at the decoration's current Y
+      dragPlane.current.set(new THREE.Vector3(0, 1, 0), -decoGroup.position.y)
+
+      highlightMesh(decoGroup)
+      container.style.cursor = 'grabbing'
+      e.preventDefault()
+
+      // Capture pointer for smooth dragging
+      container.setPointerCapture(e.pointerId)
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      const ds = dragState.current
+      const ref = sceneRef.current
+      if (!ds.active || !ds.mesh || !ref) {
+        // Hover cursor hint
+        if (ref) {
+          const ndc = getMouseNDC(e)
+          if (ndc) {
+            raycaster.current.setFromCamera(ndc, ref.camera)
+            const targets: THREE.Object3D[] = []
+            ref.decorationMeshes.forEach((group) => {
+              group.traverse((child) => {
+                if (child instanceof THREE.Mesh) targets.push(child)
+              })
+            })
+            const hits = raycaster.current.intersectObjects(targets, false)
+            container.style.cursor = hits.length > 0 ? 'grab' : ''
+          }
+        }
+        return
+      }
+
+      const ndc = getMouseNDC(e)
+      if (!ndc) return
+
+      raycaster.current.setFromCamera(ndc, ref.camera)
+      if (raycaster.current.ray.intersectPlane(dragPlane.current, intersectPoint.current)) {
+        // Convert from world to tank-local coords
+        const localPt = ref.tank.worldToLocal(intersectPoint.current.clone())
+
+        // Clamp within tank bounds
+        localPt.x = Math.max(-halfW, Math.min(halfW, localPt.x))
+        localPt.z = Math.max(-halfD, Math.min(halfD, localPt.z))
+
+        ds.mesh.position.x = localPt.x
+        ds.mesh.position.z = localPt.z
+      }
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      const ds = dragState.current
+      if (!ds.active || !ds.mesh || !ds.decorationId) return
+
+      unhighlightMesh()
+      container.style.cursor = ''
+      container.releasePointerCapture(e.pointerId)
+
+      const newX = ds.mesh.position.x
+      const newY = ds.mesh.position.y
+      const newZ = ds.mesh.position.z
+
+      const id = ds.decorationId
+
+      // Reset drag state
+      ds.active = false
+      ds.decorationId = null
+      ds.mesh = null
+
+      // Save to DB via callback
+      if (dropRef.current) {
+        dropRef.current(id, newX, newY, newZ)
+      }
+    }
+
+    container.addEventListener('pointerdown', onPointerDown)
+    container.addEventListener('pointermove', onPointerMove)
+    container.addEventListener('pointerup', onPointerUp)
+    container.addEventListener('pointercancel', onPointerUp)
+
+    // Resize
     const onResize = () => {
       if (!containerRef.current || !sceneRef.current) return
       const w = Math.max(containerRef.current.clientWidth || 800, 1)
@@ -193,6 +347,10 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     ro.observe(container)
 
     return () => {
+      container.removeEventListener('pointerdown', onPointerDown)
+      container.removeEventListener('pointermove', onPointerMove)
+      container.removeEventListener('pointerup', onPointerUp)
+      container.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('resize', onResize)
       ro.disconnect()
       renderer.dispose()
@@ -201,7 +359,7 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
       }
       sceneRef.current = null
     }
-  }, [tankSize])
+  }, [tankSize, getMouseNDC, findDecorationGroup, highlightMesh, unhighlightMesh])
 
   // ── Fish meshes ──
   useEffect(() => {
@@ -213,7 +371,6 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     const halfH = (2.5 * scale) / 2 - 0.3
     const halfD = (2.5 * scale) / 2 - 0.3
 
-    // Clean up old
     fishMeshes.forEach(({ mesh }) => {
       tank.remove(mesh)
       mesh.traverse((child) => {
@@ -226,7 +383,6 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     })
     fishMeshes.clear()
 
-    // Build new
     fish.forEach((f) => {
       const modelRef = f.fish_species?.model_ref ?? 'goldfish'
       const mesh = buildFishMesh(modelRef)
@@ -249,7 +405,6 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     const scale = TANK_SCALE[tankSize]
     const tankHeight = 2.5 * scale
 
-    // Clean up old
     decorationMeshes.forEach((mesh) => {
       tank.remove(mesh)
       mesh.traverse((child) => {
@@ -262,12 +417,10 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     })
     decorationMeshes.clear()
 
-    // Build new
     decorations.forEach((d) => {
       const assetRef = d.decoration_types?.asset_ref ?? 'plant_small'
       const mesh = buildDecorationMesh(assetRef)
 
-      // Position on the sand floor if y is near zero
       const floorY = -tankHeight / 2 + 0.02
       const posY = Math.abs(d.position_y) < 0.01 ? floorY : d.position_y
       mesh.position.set(d.position_x, posY, d.position_z)
@@ -290,7 +443,6 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     const halfD = (2.5 * scale) / 2 - 0.3
     const fishArray: FishEntry[] = Array.from(fishMeshes.entries()).map(([id, o]) => ({ id, ...o }))
 
-    // Animate water surface
     const waterMesh = ref.tank.children.find(
       (c) => c instanceof THREE.Mesh && c.rotation.x === -Math.PI / 2
     ) as THREE.Mesh | undefined
@@ -302,10 +454,8 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
       const dt = Math.min(clock.getDelta(), 0.1)
       elapsed += dt
 
-      // Fish AI
       fishBehavior(fishArray, dt, { halfW, halfH, halfD })
 
-      // Water surface ripple
       if (waterMesh) {
         const pos = waterMesh.geometry.getAttribute('position')
         for (let i = 0; i < pos.count; i++) {
@@ -318,14 +468,12 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
         pos.needsUpdate = true
       }
 
-      // Bubbles
       if (bubbleUpdate) bubbleUpdate(dt)
-
       renderer.render(scene, camera)
     }
     loop()
     return () => cancelAnimationFrame(raf)
   }, [tankSize, fish])
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+  return <div ref={containerRef} style={{ width: '100%', height: '100%', touchAction: 'none' }} />
 }

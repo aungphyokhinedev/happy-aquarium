@@ -55,6 +55,16 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
     setSidebarOpen((v) => !v)
   }
 
+  const handleDecorationDrop = useCallback(async (decorationId: string, x: number, y: number, z: number) => {
+    await supabase.from('decorations').update({
+      position_x: x,
+      position_y: y,
+      position_z: z,
+    }).eq('id', decorationId)
+    // Silently refresh decorations in background
+    refresh()
+  }, [refresh])
+
   if (loading || !aquarium) {
     return (
       <div className="game-layout">
@@ -189,6 +199,7 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
           fish={fish}
           decorations={decorations}
           onDecorationMove={refresh}
+          onDecorationDrop={handleDecorationDrop}
         />
       </div>
 
