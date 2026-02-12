@@ -44,10 +44,14 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
   if (loading || !aquarium) {
     return (
       <div className="game-layout">
-        <div className="ui-bar">
-          <span className="credits">Credits: {credits}</span>
+        <div className="game-header">
+          <div className="title-block">
+            <h1>Happy Aquarium</h1>
+            <p className="subtitle">Build your tank</p>
+          </div>
+          <div className="credits-badge">{credits}</div>
         </div>
-        <p style={{ padding: '2rem', textAlign: 'center' }}>Loading aquarium…</p>
+        <p style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading aquarium…</p>
       </div>
     )
   }
@@ -55,31 +59,40 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
   return (
     <div className="game-layout">
       <DailyCreditBanner userId={userId} credits={credits} onClaim={refreshProfile} />
-      <div className="ui-bar">
-        <span className="credits">Credits: {credits}</span>
-        <div className="nav-buttons">
-          <button className={panel === 'shop' ? 'active' : ''} onClick={() => openPanel(panel === 'shop' ? null : 'shop')}>
-            Shop
-          </button>
-          <button className={panel === 'fish' ? 'active' : ''} onClick={() => openPanel(panel === 'fish' ? null : 'fish')}>
-            My Fish
-          </button>
-          <button className={panel === 'decorations' ? 'active' : ''} onClick={() => openPanel(panel === 'decorations' ? null : 'decorations')}>
-            Decorations
-          </button>
-          <button className={panel === 'upgrade' ? 'active' : ''} onClick={() => openPanel(panel === 'upgrade' ? null : 'upgrade')}>
-            Upgrade Tank
-          </button>
-          <button className={panel === 'friends' ? 'active' : ''} onClick={() => openPanel(panel === 'friends' ? null : 'friends')}>
-            Friends
-          </button>
+      <div className="game-header">
+        <div className="title-block">
+          <h1>Happy Aquarium</h1>
+          <p className="subtitle">Build your tank</p>
         </div>
-        <div className="user-row">
-          <span>{profile.display_name || 'Player'}</span>
-          <button type="button" onClick={() => supabase.auth.signOut()}>
+        <div className="header-icons">
+          <span className="credits-badge">{credits}</span>
+          <button type="button" className="profile-btn" title={profile.display_name || 'Player'}>
+            {profile.display_name?.charAt(0)?.toUpperCase() || '?'}
+          </button>
+          <button type="button" className="sign-out-btn" onClick={() => supabase.auth.signOut()}>
             Sign out
           </button>
         </div>
+      </div>
+      <div className="menu-cards">
+        {([
+          { key: 'shop' as Panel, icon: '\u{1F6D2}', label: 'store', title: 'Shop' },
+          { key: 'fish' as Panel, icon: '\u{1F41F}', label: 'tank', title: 'My Fish' },
+          { key: 'decorations' as Panel, icon: '\u{1FAB8}', label: 'decor', title: 'Decor' },
+          { key: 'upgrade' as Panel, icon: '\u{2B06}\u{FE0F}', label: 'size', title: 'Upgrade' },
+          { key: 'friends' as Panel, icon: '\u{1F465}', label: 'social', title: 'Friends' },
+        ]).map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`menu-card ${item.key} ${panel === item.key ? 'active' : ''}`}
+            onClick={() => openPanel(panel === item.key ? null : item.key)}
+          >
+            <span className="card-icon">{item.icon}</span>
+            <span className="card-label">{item.label}</span>
+            <span className="card-title">{item.title}</span>
+          </button>
+        ))}
       </div>
       <div className="canvas-wrap">
         <AquariumScene
@@ -91,7 +104,9 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
       </div>
       {panel === 'shop' && (
         <div className="panel">
-          <div className="close-row"><button type="button" onClick={closePanel}>Close</button></div>
+          <button type="button" className="close-btn" onClick={closePanel} aria-label="Close">×</button>
+          <h2>Shop</h2>
+          <p className="panel-subtitle">Buy fish, food, and decorations</p>
           <Shop
             aquariumId={aquarium.id}
             tankSize={aquarium.tank_size}
@@ -105,7 +120,9 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
       )}
       {panel === 'fish' && (
         <div className="panel">
-          <div className="close-row"><button type="button" onClick={closePanel}>Close</button></div>
+          <button type="button" className="close-btn" onClick={closePanel} aria-label="Close">×</button>
+          <h2>My Fish</h2>
+          <p className="panel-subtitle">Feed, sell, or manage your fish</p>
           <FishList
             fish={fish}
             credits={credits}
@@ -117,7 +134,9 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
       )}
       {panel === 'decorations' && (
         <div className="panel">
-          <div className="close-row"><button type="button" onClick={closePanel}>Close</button></div>
+          <button type="button" className="close-btn" onClick={closePanel} aria-label="Close">×</button>
+          <h2>Decorations</h2>
+          <p className="panel-subtitle">Place and move decorations in your tank</p>
           <DecorationList
             aquariumId={aquarium.id}
             decorations={decorations}
@@ -130,7 +149,9 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
       )}
       {panel === 'upgrade' && (
         <div className="panel">
-          <div className="close-row"><button type="button" onClick={closePanel}>Close</button></div>
+          <button type="button" className="close-btn" onClick={closePanel} aria-label="Close">×</button>
+          <h2>Upgrade Tank</h2>
+          <p className="panel-subtitle">Expand your aquarium size</p>
           <UpgradePanel
             aquariumId={aquarium.id}
             currentSize={aquarium.tank_size}
@@ -143,7 +164,9 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
       )}
       {panel === 'friends' && (
         <div className="panel">
-          <div className="close-row"><button type="button" onClick={closePanel}>Close</button></div>
+          <button type="button" className="close-btn" onClick={closePanel} aria-label="Close">×</button>
+          <h2>Friends</h2>
+          <p className="panel-subtitle">Add and manage friends</p>
           <FriendsPanel userId={userId} onClose={closePanel} />
         </div>
       )}

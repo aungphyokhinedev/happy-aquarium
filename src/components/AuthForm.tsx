@@ -36,7 +36,9 @@ export function AuthForm() {
 
   return (
     <div className="auth-form">
+      <div style={{ textAlign: 'center', fontSize: '2.5rem', marginBottom: '0.5rem' }}>{'\u{1F420}'}</div>
       <h1>Happy Aquarium</h1>
+      <p className="subtitle">Dive in to start building your tank</p>
       <form onSubmit={handleSubmit}>
         <input
           type="email"
