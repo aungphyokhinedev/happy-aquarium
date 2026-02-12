@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { TankSize, Fish, Decoration } from '@/lib/supabase'
 import { fishBehavior, type FishEntry } from '@/game/fishBehavior'
 import { buildFishMesh, buildDecorationMesh, buildSandFloor, buildBubbleSystem } from '@/game/meshBuilders'
@@ -10,6 +11,7 @@ interface AquariumSceneProps {
   decorations: (Decoration & { decoration_types?: { asset_ref: string } })[]
   onDecorationMove?: () => void
   onDecorationDrop?: (decorationId: string, x: number, y: number, z: number) => void
+  lightOn?: boolean
 }
 
 const TANK_SCALE: Record<TankSize, number> = {
@@ -18,17 +20,29 @@ const TANK_SCALE: Record<TankSize, number> = {
   large: 1.8,
 }
 
-export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }: AquariumSceneProps) {
+// Light intensity presets
+const LIGHT_ON = { ambient: 0.9, hemi: 0.6, top: 0.8, fill: 0.4, inner: 0.5, exposure: 1.2, bgColor: 0xffffff }
+const LIGHT_OFF = { ambient: 0.12, hemi: 0.08, top: 0.0, fill: 0.0, inner: 0.06, exposure: 0.5, bgColor: 0x0a1520 }
+
+export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop, lightOn = true }: AquariumSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<{
     scene: THREE.Scene
     camera: THREE.PerspectiveCamera
     renderer: THREE.WebGLRenderer
     tank: THREE.Group
+    controls: OrbitControls
     fishMeshes: Map<string, { mesh: THREE.Group; fishId: string; speciesId: string }>
     decorationMeshes: Map<string, THREE.Group>
     clock: THREE.Clock
     bubbleUpdate: ((dt: number) => void) | null
+    lights: {
+      ambient: THREE.AmbientLight
+      hemi: THREE.HemisphereLight
+      top: THREE.DirectionalLight
+      fill: THREE.DirectionalLight
+      inner: THREE.PointLight
+    }
   } | null>(null)
 
   // Stable ref for the drop callback so event handlers always see latest
@@ -115,8 +129,8 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
     const height = Math.max(container.clientHeight || 600, 1)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0xd4eaf7)
-    scene.fog = new THREE.FogExp2(0xd4eaf7, 0.02)
+    scene.background = new THREE.Color(0xffffff)
+    scene.fog = new THREE.FogExp2(0xffffff, 0.02)
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100)
     camera.position.set(0, 1.5, 6.5)
@@ -131,12 +145,26 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
     renderer.toneMappingExposure = 1.2
     container.appendChild(renderer.domElement)
 
-    // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 0.9)
+    // Orbit controls – drag to rotate, scroll to zoom, right-click to pan
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.target.set(0, 0, 0)
+    controls.enableDamping = true
+    controls.dampingFactor = 0.08
+    controls.rotateSpeed = 0.6
+    controls.zoomSpeed = 0.8
+    controls.panSpeed = 0.5
+    controls.minDistance = 2.5
+    controls.maxDistance = 12
+    controls.maxPolarAngle = Math.PI * 0.85  // Don't flip under
+    controls.minPolarAngle = 0.1
+    controls.update()
+
+    // Lighting (intensities set by lightOn effect)
+    const ambient = new THREE.AmbientLight(0xffffff, LIGHT_ON.ambient)
     scene.add(ambient)
-    const hemi = new THREE.HemisphereLight(0xd4eaf7, 0x8ab89a, 0.6)
+    const hemi = new THREE.HemisphereLight(0xd4eaf7, 0x8ab89a, LIGHT_ON.hemi)
     scene.add(hemi)
-    const topLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    const topLight = new THREE.DirectionalLight(0xffffff, LIGHT_ON.top)
     topLight.position.set(0, 8, 2)
     topLight.castShadow = true
     topLight.shadow.mapSize.set(1024, 1024)
@@ -147,10 +175,10 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
     topLight.shadow.camera.top = 5
     topLight.shadow.camera.bottom = -5
     scene.add(topLight)
-    const fillLight = new THREE.DirectionalLight(0xfff8ee, 0.4)
+    const fillLight = new THREE.DirectionalLight(0xfff8ee, LIGHT_ON.fill)
     fillLight.position.set(2, 3, 5)
     scene.add(fillLight)
-    const innerGlow = new THREE.PointLight(0xb8ddf0, 0.5, 10, 2)
+    const innerGlow = new THREE.PointLight(0xb8ddf0, LIGHT_ON.inner, 10, 2)
     innerGlow.position.set(0, 0.5, 0)
     scene.add(innerGlow)
 
@@ -211,9 +239,10 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
     const decorationMeshes = new Map<string, THREE.Group>()
 
     sceneRef.current = {
-      scene, camera, renderer, tank,
+      scene, camera, renderer, tank, controls,
       fishMeshes, decorationMeshes, clock,
       bubbleUpdate: bubbles.update,
+      lights: { ambient, hemi, top: topLight, fill: fillLight, inner: innerGlow },
     }
 
     // Store floorY for drag
@@ -259,6 +288,9 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
       highlightMesh(decoGroup)
       container.style.cursor = 'grabbing'
       e.preventDefault()
+
+      // Disable orbit while dragging decoration
+      controls.enabled = false
 
       // Capture pointer for smooth dragging
       container.setPointerCapture(e.pointerId)
@@ -311,6 +343,9 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
       container.style.cursor = ''
       container.releasePointerCapture(e.pointerId)
 
+      // Re-enable orbit controls
+      controls.enabled = true
+
       const newX = ds.mesh.position.x
       const newY = ds.mesh.position.y
       const newZ = ds.mesh.position.z
@@ -353,6 +388,7 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
       container.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('resize', onResize)
       ro.disconnect()
+      controls.dispose()
       renderer.dispose()
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement)
@@ -360,6 +396,61 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
       sceneRef.current = null
     }
   }, [tankSize, getMouseNDC, findDecorationGroup, highlightMesh, unhighlightMesh])
+
+  // ── Light on/off transition ──
+  useEffect(() => {
+    const ref = sceneRef.current
+    if (!ref) return
+
+    const preset = lightOn ? LIGHT_ON : LIGHT_OFF
+    const { lights, scene, renderer } = ref
+
+    // Animate over ~400ms using requestAnimationFrame
+    const duration = 400
+    const startValues = {
+      ambient: lights.ambient.intensity,
+      hemi: lights.hemi.intensity,
+      top: lights.top.intensity,
+      fill: lights.fill.intensity,
+      inner: lights.inner.intensity,
+      exposure: renderer.toneMappingExposure,
+      bgR: (scene.background as THREE.Color).r,
+      bgG: (scene.background as THREE.Color).g,
+      bgB: (scene.background as THREE.Color).b,
+    }
+    const targetBg = new THREE.Color(preset.bgColor)
+    const startTime = performance.now()
+    let raf = 0
+
+    function animate(now: number) {
+      const t = Math.min((now - startTime) / duration, 1)
+      // Smooth ease-in-out
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+
+      lights.ambient.intensity = startValues.ambient + (preset.ambient - startValues.ambient) * ease
+      lights.hemi.intensity = startValues.hemi + (preset.hemi - startValues.hemi) * ease
+      lights.top.intensity = startValues.top + (preset.top - startValues.top) * ease
+      lights.fill.intensity = startValues.fill + (preset.fill - startValues.fill) * ease
+      lights.inner.intensity = startValues.inner + (preset.inner - startValues.inner) * ease
+      renderer.toneMappingExposure = startValues.exposure + (preset.exposure - startValues.exposure) * ease
+
+      const bg = scene.background as THREE.Color
+      bg.r = startValues.bgR + (targetBg.r - startValues.bgR) * ease
+      bg.g = startValues.bgG + (targetBg.g - startValues.bgG) * ease
+      bg.b = startValues.bgB + (targetBg.b - startValues.bgB) * ease
+
+      // Also update fog color
+      if (scene.fog instanceof THREE.FogExp2) {
+        scene.fog.color.copy(bg)
+      }
+
+      if (t < 1) {
+        raf = requestAnimationFrame(animate)
+      }
+    }
+    raf = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(raf)
+  }, [lightOn])
 
   // ── Fish meshes ──
   useEffect(() => {
@@ -436,7 +527,7 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
     const ref = sceneRef.current
     if (!ref) return
     let raf = 0
-    const { renderer, scene, camera, fishMeshes, clock, bubbleUpdate } = ref
+    const { renderer, scene, camera, controls, fishMeshes, clock, bubbleUpdate } = ref
     const scale = TANK_SCALE[tankSize]
     const halfW = (4 * scale) / 2 - 0.3
     const halfH = (2.5 * scale) / 2 - 0.3
@@ -453,6 +544,9 @@ export function AquariumScene({ tankSize, fish, decorations, onDecorationDrop }:
       raf = requestAnimationFrame(loop)
       const dt = Math.min(clock.getDelta(), 0.1)
       elapsed += dt
+
+      // Update orbit controls (needed for damping)
+      controls.update()
 
       fishBehavior(fishArray, dt, { halfW, halfH, halfD })
 

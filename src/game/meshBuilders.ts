@@ -20,201 +20,533 @@ function hashStr(s: string): number {
 
 // ---------- shared materials ----------
 
-function bodyMat(color: THREE.Color, emissive?: THREE.Color) {
+function bodyMat(color: THREE.Color, emissive?: THREE.Color, emissiveIntensity = 0.5) {
   return new THREE.MeshStandardMaterial({
     color,
-    emissive: emissive ?? color.clone().multiplyScalar(0.25),
-    emissiveIntensity: 0.4,
-    roughness: 0.3,
-    metalness: 0.05,
+    emissive: emissive ?? color.clone().multiplyScalar(0.35),
+    emissiveIntensity,
+    roughness: 0.25,
+    metalness: 0.08,
     flatShading: false,
   })
 }
 
-function finMat(color: THREE.Color) {
+function finMat(color: THREE.Color, opacity = 0.75) {
   return new THREE.MeshStandardMaterial({
     color,
+    emissive: color.clone().multiplyScalar(0.2),
+    emissiveIntensity: 0.3,
     transparent: true,
-    opacity: 0.7,
+    opacity,
     side: THREE.DoubleSide,
-    roughness: 0.4,
+    roughness: 0.35,
     metalness: 0.0,
   })
 }
 
-// ---------- species colour palettes ----------
+// ---------- pop-out eye builder (on stalks) ----------
 
-interface FishPalette {
-  body: THREE.Color
-  belly: THREE.Color
-  fin: THREE.Color
-  accent: THREE.Color
-  eyeColor: THREE.Color
-  bodyScaleX: number
-  bodyScaleY: number
-  bodyScaleZ: number
-  tailScale: number
-  dorsalHeight: number
-}
+function addPopEyes(
+  group: THREE.Group,
+  frontX: number, topY: number, sideZ: number,
+  eyeRadius = 0.035, pupilRadius = 0.02, stalkLen = 0.04,
+) {
+  const stalkMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.05 })
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.1,
+    emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.2,
+  })
+  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.4 })
 
-const SPECIES_PALETTES: Record<string, Partial<FishPalette>> = {
-  goldfish:       { body: hsl(0.08, 0.9, 0.55), belly: hsl(0.1, 0.85, 0.7), fin: hsl(0.06, 0.8, 0.5), accent: hsl(0.08, 1, 0.6), bodyScaleX: 1.1, bodyScaleY: 1.0, tailScale: 1.3 },
-  neon_tetra:     { body: hsl(0.55, 0.85, 0.45), belly: hsl(0.0, 0.9, 0.5), fin: hsl(0.55, 0.6, 0.5), accent: hsl(0.12, 1, 0.55), bodyScaleX: 0.7, bodyScaleY: 0.6, bodyScaleZ: 0.6, tailScale: 0.7, dorsalHeight: 0.6 },
-  guppy:          { body: hsl(0.3, 0.7, 0.5), belly: hsl(0.15, 0.6, 0.7), fin: hsl(0.8, 0.7, 0.55), accent: hsl(0.75, 0.8, 0.6), bodyScaleX: 0.65, bodyScaleY: 0.55, bodyScaleZ: 0.55, tailScale: 1.1 },
-  angelfish:      { body: hsl(0.0, 0.0, 0.92), belly: hsl(0.0, 0.0, 0.85), fin: hsl(0.6, 0.3, 0.85), accent: hsl(0.15, 0.8, 0.55), bodyScaleX: 0.6, bodyScaleY: 1.4, bodyScaleZ: 0.5, tailScale: 0.7, dorsalHeight: 1.8 },
-  betta:          { body: hsl(0.75, 0.85, 0.4), belly: hsl(0.8, 0.7, 0.55), fin: hsl(0.72, 0.9, 0.5), accent: hsl(0.0, 0.9, 0.5), bodyScaleX: 0.8, bodyScaleY: 0.9, tailScale: 1.8, dorsalHeight: 1.5 },
-  clownfish:      { body: hsl(0.07, 0.95, 0.55), belly: hsl(0.0, 0.0, 0.95), fin: hsl(0.07, 0.9, 0.5), accent: hsl(0.0, 0.0, 0.95), bodyScaleX: 0.9, bodyScaleY: 0.8, tailScale: 0.9 },
-  dragon_fish:    { body: hsl(0.58, 0.6, 0.3), belly: hsl(0.55, 0.5, 0.5), fin: hsl(0.0, 0.8, 0.4), accent: hsl(0.1, 1, 0.5), bodyScaleX: 1.3, bodyScaleY: 0.8, bodyScaleZ: 0.7, tailScale: 1.1, dorsalHeight: 1.3 },
-  crystal_tetra:  { body: hsl(0.5, 0.3, 0.75), belly: hsl(0.55, 0.2, 0.85), fin: hsl(0.52, 0.5, 0.7), accent: hsl(0.48, 0.6, 0.65), bodyScaleX: 0.7, bodyScaleY: 0.6, bodyScaleZ: 0.6, tailScale: 0.8 },
-}
+  for (const side of [1, -1]) {
+    const z = sideZ * side
+    // Stalk (small cylinder poking outward)
+    const stalkGeom = new THREE.CylinderGeometry(0.008, 0.01, stalkLen, 6)
+    const stalk = new THREE.Mesh(stalkGeom, stalkMat)
+    stalk.position.set(frontX, topY, z)
+    stalk.rotation.x = side * Math.PI * 0.5
+    group.add(stalk)
 
-function getPalette(modelRef: string): FishPalette {
-  const p = SPECIES_PALETTES[modelRef]
-  const fallbackHue = (hashStr(modelRef) % 360) / 360
-  return {
-    body:       p?.body       ?? hsl(fallbackHue, 0.7, 0.5),
-    belly:      p?.belly      ?? hsl(fallbackHue + 0.05, 0.6, 0.65),
-    fin:        p?.fin        ?? hsl(fallbackHue + 0.1, 0.6, 0.5),
-    accent:     p?.accent     ?? hsl(fallbackHue + 0.15, 0.8, 0.55),
-    eyeColor:   p?.eyeColor   ?? new THREE.Color(0x111111),
-    bodyScaleX: p?.bodyScaleX ?? 1,
-    bodyScaleY: p?.bodyScaleY ?? 1,
-    bodyScaleZ: p?.bodyScaleZ ?? 1,
-    tailScale:  p?.tailScale  ?? 1,
-    dorsalHeight: p?.dorsalHeight ?? 1,
+    // Eyeball (sphere at end of stalk)
+    const eyeGeom = new THREE.SphereGeometry(eyeRadius, 10, 10)
+    const eye = new THREE.Mesh(eyeGeom, eyeWhiteMat)
+    eye.position.set(frontX, topY, z + side * stalkLen)
+    group.add(eye)
+
+    // Pupil (forward-facing)
+    const pupilGeom = new THREE.SphereGeometry(pupilRadius, 8, 8)
+    const pupil = new THREE.Mesh(pupilGeom, pupilMat)
+    pupil.position.set(frontX + eyeRadius * 0.4, topY, z + side * (stalkLen + eyeRadius * 0.55))
+    group.add(pupil)
   }
 }
 
-// ---------- fish mesh builder ----------
+// ---------- shared pectoral fin helper ----------
 
-export function buildFishMesh(modelRef: string): THREE.Group {
-  const pal = getPalette(modelRef)
+function addPectoralFins(group: THREE.Group, color: THREE.Color, halfDepth: number, finScale = 1.0) {
+  const fs = finScale
+  const s = new THREE.Shape()
+  s.moveTo(0, 0)
+  s.lineTo(0.06 * fs, -0.03 * fs)
+  s.quadraticCurveTo(0.09 * fs, -0.08 * fs, 0.03 * fs, -0.1 * fs)
+  s.lineTo(0, 0)
+  const geom = new THREE.ShapeGeometry(s)
+  const mat = finMat(color, 0.65)
+
+  const pecL = new THREE.Mesh(geom, mat)
+  pecL.position.set(0.02, -0.04, halfDepth + 0.01)
+  pecL.rotation.x = -0.35
+  group.add(pecL)
+
+  const pecR = new THREE.Mesh(geom.clone(), mat.clone())
+  pecR.position.set(0.02, -0.04, -(halfDepth + 0.01))
+  pecR.rotation.x = 0.35
+  pecR.scale.z = -1
+  group.add(pecR)
+}
+
+// ---------- shared tail fin builder ----------
+
+function addTailFin(group: THREE.Group, tailX: number, color: THREE.Color, height = 0.12, width = 0.1) {
+  const s = new THREE.Shape()
+  s.moveTo(0, 0)
+  s.lineTo(-width, height)
+  s.lineTo(-width * 0.35, 0)
+  s.lineTo(-width, -height)
+  s.lineTo(0, 0)
+  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(s), finMat(color, 0.7))
+  mesh.position.set(tailX, 0, 0)
+  mesh.rotation.y = Math.PI * 0.5
+  group.add(mesh)
+}
+
+// ---------- shared dorsal fin builder ----------
+
+function addDorsalFin(group: THREE.Group, bodyTopY: number, color: THREE.Color, height = 0.1, width = 0.12) {
+  const ds = new THREE.Shape()
+  ds.moveTo(width * 0.4, 0)
+  ds.quadraticCurveTo(0.02, height, -width * 0.4, height * 0.2)
+  ds.lineTo(-width * 0.3, 0)
+  ds.lineTo(width * 0.4, 0)
+  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(ds), finMat(color, 0.65))
+  mesh.position.set(0, bodyTopY, 0)
+  group.add(mesh)
+}
+
+// ================================================================
+//  SPECIES-SPECIFIC CUBIC FISH BUILDERS
+//  Each species uses BoxGeometry bodies with pop-out eyes and fins
+// ================================================================
+
+/** Goldfish – chunky wide cube, big fan tail, warm orange-gold */
+function buildGoldfish(): THREE.Group {
   const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0xff8c00)
+  const bellyColor = new THREE.Color(0xffd700)
+  const finColor = new THREE.Color(0xffaa33)
 
-  // Body – ellipsoid
-  const bodyGeom = new THREE.SphereGeometry(0.16, 16, 12)
-  bodyGeom.scale(pal.bodyScaleX, pal.bodyScaleY, pal.bodyScaleZ)
-  const body = new THREE.Mesh(bodyGeom, bodyMat(pal.body))
+  // Chunky cube body (slightly wider than tall)
+  const w = 0.22, h = 0.18, d = 0.16
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor))
   body.castShadow = true
   group.add(body)
 
-  // Belly stripe (lower half tint) – thin ellipsoid
-  const bellyGeom = new THREE.SphereGeometry(0.145, 12, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5)
-  bellyGeom.scale(pal.bodyScaleX, pal.bodyScaleY * 0.5, pal.bodyScaleZ)
-  const belly = new THREE.Mesh(bellyGeom, bodyMat(pal.belly))
-  belly.position.y = -0.01
+  // Gold belly slab
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(w * 0.95, h * 0.35, d * 0.98), bodyMat(bellyColor))
+  belly.position.y = -h * 0.32
   group.add(belly)
 
-  // Tail fin – two triangles fanning out
-  const tailW = 0.12 * pal.tailScale
-  const tailH = 0.14 * pal.tailScale
-  const tailShape = new THREE.Shape()
-  tailShape.moveTo(0, 0)
-  tailShape.lineTo(-tailW, tailH)
-  tailShape.lineTo(-tailW * 0.3, 0)
-  tailShape.lineTo(-tailW, -tailH)
-  tailShape.lineTo(0, 0)
-  const tailGeom = new THREE.ShapeGeometry(tailShape)
-  const tail = new THREE.Mesh(tailGeom, finMat(pal.fin))
-  tail.position.set(-0.16 * pal.bodyScaleX, 0, 0)
-  tail.rotation.y = Math.PI * 0.5
-  group.add(tail)
+  // Big fan tail
+  for (const yOff of [0.03, -0.03]) {
+    const s = new THREE.Shape()
+    s.moveTo(0, 0)
+    s.quadraticCurveTo(-0.14, yOff + 0.12, -0.2, yOff + 0.05)
+    s.quadraticCurveTo(-0.18, yOff, -0.2, yOff - 0.05)
+    s.quadraticCurveTo(-0.14, yOff - 0.12, 0, 0)
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(s), finMat(finColor, 0.65))
+    mesh.position.set(-w / 2, 0, 0)
+    mesh.rotation.y = Math.PI * 0.5
+    group.add(mesh)
+  }
 
-  // Dorsal fin
-  const dorsalShape = new THREE.Shape()
-  const dh = 0.1 * pal.dorsalHeight
-  dorsalShape.moveTo(0.06, 0)
-  dorsalShape.quadraticCurveTo(0.02, dh, -0.06, 0.02)
-  dorsalShape.lineTo(-0.04, 0)
-  dorsalShape.lineTo(0.06, 0)
-  const dorsalGeom = new THREE.ShapeGeometry(dorsalShape)
-  const dorsal = new THREE.Mesh(dorsalGeom, finMat(pal.fin))
-  dorsal.position.set(0, 0.12 * pal.bodyScaleY, 0)
-  dorsal.rotation.x = 0
+  addDorsalFin(group, h / 2, finColor, 0.1, 0.14)
+  addPectoralFins(group, finColor, d / 2)
+  addPopEyes(group, w / 2 + 0.01, h * 0.2, d * 0.3, 0.035, 0.02, 0.04)
+  return group
+}
+
+/** Neon Tetra – small slim box, neon blue stripe, red rear */
+function buildNeonTetra(): THREE.Group {
+  const group = new THREE.Group()
+  const silverBody = new THREE.Color(0xc8d8e8)
+  const blueStripe = new THREE.Color(0x00ccff)
+  const redRear = new THREE.Color(0xff2244)
+
+  const w = 0.16, h = 0.09, d = 0.08
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(silverBody, undefined, 0.3))
+  body.castShadow = true
+  group.add(body)
+
+  // Neon blue stripe band across middle
+  const stripe = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 1.01, h * 0.25, d * 1.01),
+    new THREE.MeshStandardMaterial({ color: blueStripe, emissive: blueStripe, emissiveIntensity: 0.9, roughness: 0.15 })
+  )
+  stripe.position.y = h * 0.05
+  group.add(stripe)
+
+  // Red rear block
+  const rear = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.4, h * 0.9, d * 0.9),
+    bodyMat(redRear, redRear.clone().multiplyScalar(0.5), 0.6)
+  )
+  rear.position.x = -w * 0.32
+  group.add(rear)
+
+  addTailFin(group, -w / 2, redRear, 0.06, 0.06)
+  addDorsalFin(group, h / 2, new THREE.Color(0xeeeeee), 0.04, 0.06)
+  addPectoralFins(group, new THREE.Color(0xdddddd), d / 2, 0.5)
+  addPopEyes(group, w / 2 + 0.01, h * 0.15, d * 0.28, 0.022, 0.013, 0.03)
+  return group
+}
+
+/** Guppy – small cube with oversized colorful fan tail */
+function buildGuppy(): THREE.Group {
+  const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0x44cc77)
+  const tailColor = new THREE.Color(0xff44cc)
+  const finAccent = new THREE.Color(0xaa55ff)
+
+  const w = 0.13, h = 0.1, d = 0.09
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor))
+  body.castShadow = true
+  group.add(body)
+
+  // Lighter belly
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(w * 0.95, h * 0.3, d * 0.95), bodyMat(new THREE.Color(0x88eebb)))
+  belly.position.y = -h * 0.35
+  group.add(belly)
+
+  // Oversized fan tail (guppy signature)
+  const ts = new THREE.Shape()
+  ts.moveTo(0, 0)
+  ts.quadraticCurveTo(-0.12, 0.14, -0.18, 0.07)
+  ts.quadraticCurveTo(-0.2, 0, -0.18, -0.07)
+  ts.quadraticCurveTo(-0.12, -0.14, 0, 0)
+  const tailMesh = new THREE.Mesh(new THREE.ShapeGeometry(ts), finMat(tailColor, 0.7))
+  tailMesh.position.set(-w / 2, 0, 0)
+  tailMesh.rotation.y = Math.PI * 0.5
+  group.add(tailMesh)
+
+  // Inner tail layer
+  const ts2 = new THREE.Shape()
+  ts2.moveTo(0, 0)
+  ts2.quadraticCurveTo(-0.08, 0.09, -0.13, 0.04)
+  ts2.quadraticCurveTo(-0.14, 0, -0.13, -0.04)
+  ts2.quadraticCurveTo(-0.08, -0.09, 0, 0)
+  const tail2 = new THREE.Mesh(new THREE.ShapeGeometry(ts2), finMat(finAccent, 0.5))
+  tail2.position.set(-w / 2, 0, 0.001)
+  tail2.rotation.y = Math.PI * 0.5
+  group.add(tail2)
+
+  addDorsalFin(group, h / 2, finAccent, 0.06, 0.08)
+  addPectoralFins(group, new THREE.Color(0x88ddaa), d / 2, 0.6)
+  addPopEyes(group, w / 2 + 0.01, h * 0.15, d * 0.3, 0.02, 0.012, 0.03)
+  return group
+}
+
+/** Angelfish – tall narrow cube, vertical stripes, long trailing fins */
+function buildAngelfish(): THREE.Group {
+  const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0xf0f0f0)
+  const stripeColor = new THREE.Color(0x222222)
+  const finColor = new THREE.Color(0xddeeff)
+
+  // Tall and flat cube
+  const w = 0.12, h = 0.28, d = 0.08
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor, undefined, 0.3))
+  body.castShadow = true
+  group.add(body)
+
+  // Vertical black stripes
+  for (const xPos of [0.02, -0.025]) {
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.012, h * 0.95, d * 1.01),
+      new THREE.MeshStandardMaterial({ color: stripeColor, roughness: 0.4, emissive: stripeColor, emissiveIntensity: 0.2 })
+    )
+    stripe.position.x = xPos
+    group.add(stripe)
+  }
+
+  // Tall dorsal
+  const ds = new THREE.Shape()
+  ds.moveTo(0.04, 0)
+  ds.quadraticCurveTo(0.02, 0.2, -0.04, 0.14)
+  ds.quadraticCurveTo(-0.05, 0.07, -0.04, 0)
+  ds.lineTo(0.04, 0)
+  const dorsal = new THREE.Mesh(new THREE.ShapeGeometry(ds), finMat(finColor, 0.55))
+  dorsal.position.set(0, h / 2, 0)
   group.add(dorsal)
 
-  // Pectoral fins (left + right)
-  const pectoralShape = new THREE.Shape()
-  pectoralShape.moveTo(0, 0)
-  pectoralShape.lineTo(0.06, -0.04)
-  pectoralShape.quadraticCurveTo(0.08, -0.08, 0.03, -0.09)
-  pectoralShape.lineTo(0, 0)
-  const pecGeom = new THREE.ShapeGeometry(pectoralShape)
-  const pecMatL = finMat(pal.fin)
-  const pecL = new THREE.Mesh(pecGeom, pecMatL)
-  pecL.position.set(0.02, -0.06, 0.1 * pal.bodyScaleZ)
-  pecL.rotation.x = -0.3
-  group.add(pecL)
-  const pecR = new THREE.Mesh(pecGeom.clone(), pecMatL.clone())
-  pecR.position.set(0.02, -0.06, -0.1 * pal.bodyScaleZ)
-  pecR.rotation.x = 0.3
-  pecR.scale.z = -1
-  group.add(pecR)
-
-  // Eyes
-  const eyeGeom = new THREE.SphereGeometry(0.025, 8, 8)
-  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 })
-  const pupilGeom = new THREE.SphereGeometry(0.014, 8, 8)
-  const pupilMat = new THREE.MeshStandardMaterial({ color: pal.eyeColor, roughness: 0.1, metalness: 0.3 })
-
-  const eyeOffsetX = 0.1 * pal.bodyScaleX
-  const eyeOffsetY = 0.04 * pal.bodyScaleY
-  const eyeOffsetZ = 0.09 * pal.bodyScaleZ
-
-  const eyeL = new THREE.Mesh(eyeGeom, eyeWhiteMat)
-  eyeL.position.set(eyeOffsetX, eyeOffsetY, eyeOffsetZ)
-  group.add(eyeL)
-  const pupilL = new THREE.Mesh(pupilGeom, pupilMat)
-  pupilL.position.set(eyeOffsetX + 0.015, eyeOffsetY, eyeOffsetZ + 0.012)
-  group.add(pupilL)
-
-  const eyeR = new THREE.Mesh(eyeGeom.clone(), eyeWhiteMat.clone())
-  eyeR.position.set(eyeOffsetX, eyeOffsetY, -eyeOffsetZ)
-  group.add(eyeR)
-  const pupilR = new THREE.Mesh(pupilGeom.clone(), pupilMat.clone())
-  pupilR.position.set(eyeOffsetX + 0.015, eyeOffsetY, -eyeOffsetZ - 0.012)
-  group.add(pupilR)
-
-  // Clownfish stripes
-  if (modelRef === 'clownfish') {
-    const stripeGeom = new THREE.TorusGeometry(0.13, 0.012, 6, 16)
-    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
-    for (const x of [0.06, -0.04]) {
-      const stripe = new THREE.Mesh(stripeGeom, stripeMat)
-      stripe.position.x = x
-      stripe.rotation.y = Math.PI / 2
-      stripe.scale.set(pal.bodyScaleY * 0.9, 1, pal.bodyScaleZ * 0.9)
-      group.add(stripe)
-    }
+  // Long trailing ventral fins
+  for (const side of [1, -1]) {
+    const vs = new THREE.Shape()
+    vs.moveTo(0, 0); vs.lineTo(-0.015, -0.2); vs.lineTo(0.015, -0.17); vs.lineTo(0.01, 0)
+    const ventral = new THREE.Mesh(new THREE.ShapeGeometry(vs), finMat(new THREE.Color(0xffffcc), 0.5))
+    ventral.position.set(0, -h / 2 - 0.01, side * d * 0.35)
+    group.add(ventral)
   }
 
-  // Crystal tetra – add subtle emissive glow
-  if (modelRef === 'crystal_tetra') {
-    const glowGeom = new THREE.SphereGeometry(0.17, 12, 10)
-    glowGeom.scale(pal.bodyScaleX, pal.bodyScaleY, pal.bodyScaleZ)
-    const glowMat = new THREE.MeshStandardMaterial({
-      color: hsl(0.52, 0.5, 0.7),
-      emissive: hsl(0.52, 0.7, 0.4),
-      emissiveIntensity: 0.6,
-      transparent: true,
-      opacity: 0.3,
-      roughness: 0.1,
-    })
-    const glow = new THREE.Mesh(glowGeom, glowMat)
-    group.add(glow)
+  addTailFin(group, -w / 2, finColor, 0.1, 0.06)
+  addPopEyes(group, w / 2 + 0.01, h * 0.25, d * 0.3, 0.025, 0.015, 0.03)
+  return group
+}
+
+/** Betta – medium cube with dramatic flowing veil fins */
+function buildBetta(): THREE.Group {
+  const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0x6622cc)
+  const finColor1 = new THREE.Color(0x8833ff)
+  const finColor2 = new THREE.Color(0xff2266)
+
+  const w = 0.16, h = 0.14, d = 0.11
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor))
+  body.castShadow = true
+  group.add(body)
+
+  // Lighter belly
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(w * 0.95, h * 0.35, d * 0.95), bodyMat(new THREE.Color(0x9955ff)))
+  belly.position.y = -h * 0.32
+  group.add(belly)
+
+  // Huge dramatic veil tail (betta signature – 3 layers)
+  for (let i = 0; i < 3; i++) {
+    const spread = 0.16 + i * 0.04
+    const len = 0.22 + i * 0.03
+    const s = new THREE.Shape()
+    s.moveTo(0, 0)
+    s.quadraticCurveTo(-len * 0.6, spread, -len, spread * 0.5)
+    s.quadraticCurveTo(-len * 1.1, 0, -len, -spread * 0.5)
+    s.quadraticCurveTo(-len * 0.6, -spread, 0, 0)
+    const color = i % 2 === 0 ? finColor1 : finColor2
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(s), finMat(color, 0.5 + i * 0.08))
+    mesh.position.set(-w / 2, 0, i * 0.002)
+    mesh.rotation.y = Math.PI * 0.5
+    group.add(mesh)
   }
 
-  // Dragon fish – spiky dorsal
-  if (modelRef === 'dragon_fish') {
+  // Tall dorsal
+  const ds = new THREE.Shape()
+  ds.moveTo(0.06, 0)
+  ds.quadraticCurveTo(0.04, 0.16, -0.02, 0.12)
+  ds.quadraticCurveTo(-0.06, 0.08, -0.07, 0.02)
+  ds.lineTo(-0.05, 0); ds.lineTo(0.06, 0)
+  const dorsal = new THREE.Mesh(new THREE.ShapeGeometry(ds), finMat(finColor1, 0.6))
+  dorsal.position.set(0, h / 2, 0)
+  group.add(dorsal)
+
+  // Flowing anal fin
+  const af = new THREE.Shape()
+  af.moveTo(0.04, 0)
+  af.quadraticCurveTo(0, -0.12, -0.08, -0.1)
+  af.quadraticCurveTo(-0.1, -0.05, -0.07, 0)
+  af.lineTo(0.04, 0)
+  const analFin = new THREE.Mesh(new THREE.ShapeGeometry(af), finMat(finColor2, 0.55))
+  analFin.position.set(-0.02, -h / 2, 0)
+  group.add(analFin)
+
+  addPectoralFins(group, finColor1, d / 2, 0.8)
+  addPopEyes(group, w / 2 + 0.01, h * 0.2, d * 0.3, 0.028, 0.016, 0.035)
+  return group
+}
+
+/** Clownfish – orange cube, 3 white stripes with black edges */
+function buildClownfish(): THREE.Group {
+  const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0xff6600)
+  const finColor = new THREE.Color(0xff7722)
+
+  const w = 0.2, h = 0.14, d = 0.12
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor, undefined, 0.6))
+  body.castShadow = true
+  group.add(body)
+
+  // 3 white stripes with black borders
+  for (const xPos of [0.06, 0, -0.06]) {
+    // Black border stripe
+    const border = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, h * 1.02, d * 1.02),
+      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, emissive: new THREE.Color(0x111111), emissiveIntensity: 0.1 })
+    )
+    border.position.x = xPos
+    group.add(border)
+
+    // White inner stripe
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.014, h * 1.03, d * 1.03),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.15 })
+    )
+    stripe.position.x = xPos
+    group.add(stripe)
+  }
+
+  addTailFin(group, -w / 2, finColor, 0.09, 0.08)
+  addDorsalFin(group, h / 2, new THREE.Color(0xff8833), 0.08, 0.12)
+  addPectoralFins(group, finColor, d / 2, 0.7)
+  addPopEyes(group, w / 2 + 0.01, h * 0.2, d * 0.3, 0.028, 0.016, 0.035)
+  return group
+}
+
+/** Dragon Fish – long narrow cube, scale dots, barbel whiskers, spiky dorsal */
+function buildDragonFish(): THREE.Group {
+  const group = new THREE.Group()
+  const bodyColor = new THREE.Color(0x228877)
+  const scaleColor = new THREE.Color(0x33ccaa)
+  const finColor = new THREE.Color(0xff4422)
+  const accentGold = new THREE.Color(0xffcc00)
+
+  // Long narrow cube body
+  const w = 0.32, h = 0.12, d = 0.1
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(bodyColor))
+  body.castShadow = true
+  group.add(body)
+
+  // Scale dots on sides
+  for (let row = 0; row < 2; row++) {
     for (let i = 0; i < 5; i++) {
-      const spikeGeom = new THREE.ConeGeometry(0.012, 0.06, 4)
-      const spike = new THREE.Mesh(spikeGeom, bodyMat(pal.accent))
-      spike.position.set(0.08 - i * 0.04, 0.16 * pal.bodyScaleY, 0)
-      spike.rotation.z = -0.15 + i * 0.04
-      group.add(spike)
+      const scaleGeom = new THREE.BoxGeometry(0.025, 0.015, 0.008)
+      const scaleMesh = new THREE.Mesh(scaleGeom, new THREE.MeshStandardMaterial({
+        color: scaleColor, emissive: scaleColor, emissiveIntensity: 0.35, roughness: 0.2, metalness: 0.15,
+      }))
+      const x = 0.1 - i * 0.055
+      const y = 0.02 - row * 0.04
+      scaleMesh.position.set(x, y, d / 2 + 0.004)
+      group.add(scaleMesh)
+      const scaleR = scaleMesh.clone()
+      scaleR.position.z = -(d / 2 + 0.004)
+      group.add(scaleR)
     }
   }
 
+  // Barbel whiskers
+  for (const side of [1, -1]) {
+    const barbelGeom = new THREE.CylinderGeometry(0.004, 0.001, 0.08, 4)
+    const barbel = new THREE.Mesh(barbelGeom, new THREE.MeshStandardMaterial({
+      color: accentGold, emissive: accentGold, emissiveIntensity: 0.4, roughness: 0.3,
+    }))
+    barbel.position.set(w / 2 + 0.02, -h * 0.25, side * 0.025)
+    barbel.rotation.z = Math.PI * 0.35
+    group.add(barbel)
+  }
+
+  // Spiky dorsal ridge
+  for (let i = 0; i < 6; i++) {
+    const spikeH = 0.05 + Math.sin(i * 0.9) * 0.02
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.012, spikeH, 4), bodyMat(finColor))
+    spike.position.set(0.1 - i * 0.05, h / 2 + spikeH * 0.4, 0)
+    group.add(spike)
+  }
+
+  addTailFin(group, -w / 2, finColor, 0.1, 0.1)
+
+  // Anal fin
+  const af = new THREE.Shape()
+  af.moveTo(0.04, 0); af.quadraticCurveTo(0, -0.06, -0.07, -0.04); af.lineTo(-0.05, 0); af.lineTo(0.04, 0)
+  const analFin = new THREE.Mesh(new THREE.ShapeGeometry(af), finMat(finColor, 0.6))
+  analFin.position.set(-0.06, -h / 2, 0)
+  group.add(analFin)
+
+  addPectoralFins(group, new THREE.Color(0x44aa88), d / 2, 0.8)
+  addPopEyes(group, w / 2 + 0.01, h * 0.2, d * 0.3, 0.03, 0.018, 0.04)
+  return group
+}
+
+/** Crystal Tetra – translucent glowing cube with prismatic shimmer */
+function buildCrystalTetra(): THREE.Group {
+  const group = new THREE.Group()
+  const crystalColor = new THREE.Color(0x88ddff)
+  const shimmer1 = new THREE.Color(0xaaeeff)
+  const shimmer2 = new THREE.Color(0xddaaff)
+  const glowCore = new THREE.Color(0x44ccff)
+
+  const w = 0.14, h = 0.1, d = 0.09
+  // Translucent cube body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshPhysicalMaterial({
+      color: crystalColor, emissive: glowCore, emissiveIntensity: 0.6,
+      roughness: 0.1, metalness: 0.05, transmission: 0.4, thickness: 0.3,
+      transparent: true, opacity: 0.75,
+    })
+  )
+  body.castShadow = true
+  group.add(body)
+
+  // Inner glow core (smaller cube)
+  const glow = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.6, h * 0.6, d * 0.6),
+    new THREE.MeshStandardMaterial({
+      color: glowCore, emissive: glowCore, emissiveIntensity: 0.9,
+      transparent: true, opacity: 0.35, roughness: 0.05,
+    })
+  )
+  group.add(glow)
+
+  // Shimmer patches
+  for (let i = 0; i < 4; i++) {
+    const color = i % 2 === 0 ? shimmer1 : shimmer2
+    const p = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 0.025, 0.01),
+      new THREE.MeshStandardMaterial({
+        color, emissive: color, emissiveIntensity: 0.5,
+        transparent: true, opacity: 0.35, roughness: 0.1,
+      })
+    )
+    p.position.set(0.04 - i * 0.03, 0.015 * (i % 2 === 0 ? 1 : -1), d / 2 + 0.005)
+    group.add(p)
+  }
+
+  addTailFin(group, -w / 2, shimmer2, 0.06, 0.05)
+  addDorsalFin(group, h / 2, shimmer1, 0.04, 0.06)
+  addPectoralFins(group, shimmer1, d / 2, 0.5)
+  addPopEyes(group, w / 2 + 0.01, h * 0.15, d * 0.3, 0.02, 0.012, 0.025)
+  return group
+}
+
+// ---------- fish mesh builder (public) ----------
+
+export function buildFishMesh(modelRef: string): THREE.Group {
+  switch (modelRef) {
+    case 'goldfish':       return buildGoldfish()
+    case 'neon_tetra':     return buildNeonTetra()
+    case 'guppy':          return buildGuppy()
+    case 'angelfish':      return buildAngelfish()
+    case 'betta':          return buildBetta()
+    case 'clownfish':      return buildClownfish()
+    case 'dragon_fish':    return buildDragonFish()
+    case 'crystal_tetra':  return buildCrystalTetra()
+    default: {
+      const fallbackHue = (hashStr(modelRef) % 360) / 360
+      return buildGenericFish(fallbackHue)
+    }
+  }
+}
+
+/** Fallback generic cubic fish for unknown species */
+function buildGenericFish(hue: number): THREE.Group {
+  const group = new THREE.Group()
+  const color = hsl(hue, 0.85, 0.55)
+  const finC = hsl(hue + 0.1, 0.75, 0.5)
+
+  const w = 0.18, h = 0.13, d = 0.1
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat(color))
+  body.castShadow = true
+  group.add(body)
+
+  addTailFin(group, -w / 2, finC, 0.1, 0.08)
+  addDorsalFin(group, h / 2, finC, 0.08, 0.1)
+  addPectoralFins(group, finC, d / 2)
+  addPopEyes(group, w / 2 + 0.01, h * 0.15, d * 0.3)
   return group
 }
 
@@ -516,10 +848,10 @@ export function buildBubbleSystem(count: number, bounds: { w: number; h: number;
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3))
 
   const mat = new THREE.PointsMaterial({
-    color: 0xaaddff,
-    size: 0.025,
+    color: 0x3399ff,
+    size: 0.03,
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.6,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   })

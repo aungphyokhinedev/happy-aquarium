@@ -30,6 +30,7 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
   const [panel, setPanel] = useState<Panel>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [credits, setCredits] = useState(profile?.daily_credits_balance ?? 0)
+  const [lightOn, setLightOn] = useState(true)
 
   useEffect(() => {
     if (profile) setCredits(profile.daily_credits_balance)
@@ -183,6 +184,18 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
           </span>
           <button
             type="button"
+            className={`light-toggle ${lightOn ? 'on' : 'off'}`}
+            onClick={() => setLightOn((v) => !v)}
+            title={lightOn ? 'Turn off light' : 'Turn on light'}
+            aria-label="Toggle aquarium light"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18h6M10 22h4"/>
+              <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A7 7 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5"/>
+            </svg>
+          </button>
+          <button
+            type="button"
             className="profile-btn"
             title={profile.display_name || 'Player'}
             onClick={toggleSidebar}
@@ -200,6 +213,7 @@ export function GameLayout({ profile, userId }: GameLayoutProps) {
           decorations={decorations}
           onDecorationMove={refresh}
           onDecorationDrop={handleDecorationDrop}
+          lightOn={lightOn}
         />
       </div>
 

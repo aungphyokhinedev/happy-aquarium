@@ -421,6 +421,40 @@ body {
   color: var(--purple-500);
 }
 
+/* ── Light toggle ── */
+.light-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-default);
+  background: var(--bg-white);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+
+.light-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.light-toggle.on {
+  background: var(--purple-50);
+  border-color: var(--purple-300);
+  color: var(--purple-600);
+  box-shadow: 0 0 8px rgba(147, 51, 234, 0.15);
+}
+
+.light-toggle.off {
+  background: var(--bg-subtle);
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+
 /* ── Profile button ── */
 .profile-btn {
   width: 34px;
