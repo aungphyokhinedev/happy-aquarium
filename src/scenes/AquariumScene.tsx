@@ -37,10 +37,10 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     const width = Math.max(container.clientWidth || 800, 1)
     const height = Math.max(container.clientHeight || 600, 1)
 
-    // Scene
+    // Scene – soft light aquatic background
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x050d1a)
-    scene.fog = new THREE.FogExp2(0x061428, 0.12)
+    scene.background = new THREE.Color(0xd4eaf7)
+    scene.fog = new THREE.FogExp2(0xd4eaf7, 0.02)
 
     // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100)
@@ -54,40 +54,38 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = 1.2
     container.appendChild(renderer.domElement)
 
-    // ── Lighting ──
-    // Underwater ambient – deep blue
-    const ambient = new THREE.AmbientLight(0x1a3050, 0.8)
+    // ── Lighting (soft, balanced) ──
+    const ambient = new THREE.AmbientLight(0xffffff, 0.9)
     scene.add(ambient)
 
-    // Caustic-like top-down light
-    const topLight = new THREE.DirectionalLight(0x88ccff, 0.9)
+    // Hemisphere – soft sky/ground
+    const hemi = new THREE.HemisphereLight(0xd4eaf7, 0x8ab89a, 0.6)
+    scene.add(hemi)
+
+    // Top-down hood lamp – moderate
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.8)
     topLight.position.set(0, 8, 2)
     topLight.castShadow = true
     topLight.shadow.mapSize.set(1024, 1024)
     topLight.shadow.camera.near = 0.5
     topLight.shadow.camera.far = 20
-    topLight.shadow.camera.left = -4
-    topLight.shadow.camera.right = 4
-    topLight.shadow.camera.top = 4
-    topLight.shadow.camera.bottom = -4
+    topLight.shadow.camera.left = -5
+    topLight.shadow.camera.right = 5
+    topLight.shadow.camera.top = 5
+    topLight.shadow.camera.bottom = -5
     scene.add(topLight)
 
-    // Warm fill from front-right
-    const fillLight = new THREE.DirectionalLight(0xfff0dd, 0.35)
-    fillLight.position.set(3, 3, 5)
+    // Gentle fill from front
+    const fillLight = new THREE.DirectionalLight(0xfff8ee, 0.4)
+    fillLight.position.set(2, 3, 5)
     scene.add(fillLight)
 
-    // Cool rim from back-left
-    const rimLight = new THREE.DirectionalLight(0x4488cc, 0.3)
-    rimLight.position.set(-4, 2, -3)
-    scene.add(rimLight)
-
-    // Point light inside tank for glow
-    const innerGlow = new THREE.PointLight(0x3366aa, 0.4, 8)
-    innerGlow.position.set(0, 1, 0)
+    // Soft inner glow
+    const innerGlow = new THREE.PointLight(0xb8ddf0, 0.5, 10, 2)
+    innerGlow.position.set(0, 0.5, 0)
     scene.add(innerGlow)
 
     // ── Tank ──
@@ -100,40 +98,39 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     // Glass
     const glassGeom = new THREE.BoxGeometry(tankWidth, tankHeight, tankDepth)
     const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x88ccff,
+      color: 0xc8e6f8,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.06,
       side: THREE.BackSide,
       roughness: 0.05,
       metalness: 0.0,
-      transmission: 0.95,
-      thickness: 0.5,
-      envMapIntensity: 0.5,
+      transmission: 0.96,
+      thickness: 0.3,
     })
     const glass = new THREE.Mesh(glassGeom, glassMat)
     glass.receiveShadow = true
     tank.add(glass)
 
-    // Glass edges (wireframe)
+    // Glass edges (wireframe) – light
     const edgeGeom = new THREE.BoxGeometry(tankWidth, tankHeight, tankDepth)
     const edgeMat = new THREE.MeshBasicMaterial({
-      color: 0x334466,
+      color: 0x90b8d0,
       wireframe: true,
       transparent: true,
-      opacity: 0.15,
+      opacity: 0.12,
     })
     const edges = new THREE.Mesh(edgeGeom, edgeMat)
     tank.add(edges)
 
-    // Water surface
+    // Water surface – light teal
     const waterGeom = new THREE.PlaneGeometry(tankWidth * 0.98, tankDepth * 0.98, 24, 24)
     const waterMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1a5a8a,
+      color: 0x7bbde0,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.15,
       side: THREE.DoubleSide,
-      roughness: 0.1,
-      metalness: 0.15,
+      roughness: 0.15,
+      metalness: 0.05,
     })
     const water = new THREE.Mesh(waterGeom, waterMat)
     water.rotation.x = -Math.PI / 2
@@ -146,11 +143,11 @@ export function AquariumScene({ tankSize, fish, decorations }: AquariumSceneProp
     sandFloor.position.y = -tankHeight / 2 + 0.01
     tank.add(sandFloor)
 
-    // Back wall – very dark, subtle gradient
+    // Back wall – soft light blue
     const backGeom = new THREE.PlaneGeometry(tankWidth * 0.99, tankHeight * 0.99)
     const backMat = new THREE.MeshStandardMaterial({
-      color: 0x0a1a2e,
-      roughness: 1.0,
+      color: 0xa8d4e8,
+      roughness: 0.9,
       metalness: 0.0,
       side: THREE.DoubleSide,
     })

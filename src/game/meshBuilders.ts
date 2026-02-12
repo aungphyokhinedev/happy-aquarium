@@ -23,9 +23,10 @@ function hashStr(s: string): number {
 function bodyMat(color: THREE.Color, emissive?: THREE.Color) {
   return new THREE.MeshStandardMaterial({
     color,
-    emissive: emissive ?? color.clone().multiplyScalar(0.15),
-    roughness: 0.35,
-    metalness: 0.1,
+    emissive: emissive ?? color.clone().multiplyScalar(0.25),
+    emissiveIntensity: 0.4,
+    roughness: 0.3,
+    metalness: 0.05,
     flatShading: false,
   })
 }
@@ -224,7 +225,7 @@ function buildPlant(height: number, leafCount: number, color: THREE.Color): THRE
 
   // Stem
   const stemGeom = new THREE.CylinderGeometry(0.012, 0.018, height, 6)
-  const stemMat = new THREE.MeshStandardMaterial({ color: hsl(0.3, 0.5, 0.3), roughness: 0.7 })
+  const stemMat = new THREE.MeshStandardMaterial({ color: hsl(0.3, 0.55, 0.4), roughness: 0.6 })
   const stem = new THREE.Mesh(stemGeom, stemMat)
   stem.position.y = height / 2
   group.add(stem)
@@ -281,8 +282,8 @@ function buildRock(size: number): THREE.Group {
   geom.computeVertexNormals()
 
   const mat = new THREE.MeshStandardMaterial({
-    color: hsl(0.08, 0.15, 0.35),
-    roughness: 0.85,
+    color: hsl(0.08, 0.2, 0.5),
+    roughness: 0.75,
     metalness: 0.05,
     flatShading: true,
   })
@@ -295,8 +296,8 @@ function buildRock(size: number): THREE.Group {
   for (let i = 0; i < 3; i++) {
     const mossGeom = new THREE.SphereGeometry(size * 0.3, 6, 4)
     const mossMat = new THREE.MeshStandardMaterial({
-      color: hsl(0.3, 0.5, 0.3),
-      roughness: 0.9,
+      color: hsl(0.3, 0.55, 0.45),
+      roughness: 0.8,
       flatShading: true,
     })
     const moss = new THREE.Mesh(mossGeom, mossMat)
@@ -459,8 +460,8 @@ export function buildSandFloor(width: number, depth: number): THREE.Group {
   sandGeom.computeVertexNormals()
 
   const sandMat = new THREE.MeshStandardMaterial({
-    color: hsl(0.1, 0.35, 0.35),
-    roughness: 0.95,
+    color: hsl(0.1, 0.35, 0.65),
+    roughness: 0.8,
     metalness: 0.0,
     flatShading: false,
   })
@@ -471,7 +472,7 @@ export function buildSandFloor(width: number, depth: number): THREE.Group {
 
   // Small pebbles
   const pebbleGeom = new THREE.SphereGeometry(0.015, 5, 4)
-  const pebbleColors = [hsl(0.08, 0.2, 0.4), hsl(0.06, 0.15, 0.35), hsl(0.1, 0.1, 0.5)]
+  const pebbleColors = [hsl(0.08, 0.2, 0.6), hsl(0.06, 0.15, 0.55), hsl(0.1, 0.1, 0.65)]
   for (let i = 0; i < 30; i++) {
     const pMat = new THREE.MeshStandardMaterial({
       color: pebbleColors[i % pebbleColors.length],
