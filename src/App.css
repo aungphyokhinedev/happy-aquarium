@@ -1,0 +1,403 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0a1628;
+  color: #e0e8f0;
+}
+
+.app-loading,
+.app-auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-form {
+  background: rgba(20, 40, 70, 0.9);
+  padding: 2rem;
+  border-radius: 12px;
+  min-width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.auth-form h1 {
+  margin: 0 0 1.5rem;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.auth-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-form input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #3a5a80;
+  border-radius: 8px;
+  background: #0f2847;
+  color: #e0e8f0;
+  font-size: 1rem;
+}
+
+.auth-form input::placeholder {
+  color: #7a9bc0;
+}
+
+.auth-form button[type="submit"] {
+  padding: 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: #1e88e5;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-form button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-form .toggle {
+  margin-top: 1rem;
+  background: none;
+  border: none;
+  color: #7eb8f0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.auth-form .oauth {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auth-form .oauth button {
+  padding: 0.5rem;
+  background: #1a3a5c;
+  border: 1px solid #3a5a80;
+  border-radius: 6px;
+  color: #e0e8f0;
+  cursor: pointer;
+}
+
+.auth-form .oauth button:disabled {
+  opacity: 0.6;
+}
+
+.auth-form .error {
+  color: #f48fb1;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.auth-form .ok {
+  color: #80cbc4;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.game-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.game-layout .canvas-wrap {
+  flex: 1 1 0;
+  min-height: 400px;
+  position: relative;
+}
+
+.game-layout .canvas-wrap > div {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.game-layout .canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.game-layout .ui-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 40, 70, 0.95);
+  border-top: 1px solid #2a4a6a;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.game-layout .credits {
+  font-weight: 600;
+  color: #81d4fa;
+}
+
+.game-layout .nav-buttons button {
+  margin-left: 0.25rem;
+  padding: 0.4rem 0.8rem;
+  background: #1a4a7a;
+  border: 1px solid #3a6a9a;
+  border-radius: 6px;
+  color: #e0e8f0;
+  cursor: pointer;
+}
+
+.game-layout .nav-buttons button:hover {
+  background: #2a5a8a;
+}
+
+.game-layout .nav-buttons button.active {
+  background: #1e88e5;
+  border-color: #42a5f5;
+}
+
+.game-layout .user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.game-layout .user-row span {
+  font-size: 0.9rem;
+}
+
+.game-layout .user-row button {
+  padding: 0.3rem 0.6rem;
+  background: #2a3a4a;
+  border: 1px solid #4a5a6a;
+  border-radius: 4px;
+  color: #e0e8f0;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 22, 40, 0.92);
+  padding: 1rem;
+  overflow: auto;
+  z-index: 10;
+}
+
+.panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.panel .close-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.panel .close-row button {
+  padding: 0.4rem 0.8rem;
+  background: #2a4a6a;
+  border: none;
+  border-radius: 6px;
+  color: #e0e8f0;
+  cursor: pointer;
+}
+
+.panel .shop-grid,
+.panel .fish-grid,
+.panel .decoration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.panel .shop-card,
+.panel .fish-card,
+.panel .decoration-card {
+  background: rgba(26, 58, 92, 0.8);
+  border: 1px solid #3a6a9a;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.panel .shop-card h3,
+.panel .fish-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.panel .shop-card p,
+.panel .fish-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #9ab8d8;
+}
+
+.panel .shop-card button,
+.panel .fish-card button,
+.panel .decoration-card button {
+  margin-top: 0.5rem;
+  width: 100%;
+  padding: 0.4rem;
+  background: #1e88e5;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.panel .shop-card button:disabled,
+.panel .fish-card button:disabled {
+  background: #3a5a80;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.panel .fish-card .sell-row {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.panel .fish-card .sell-row input {
+  width: 60px;
+  padding: 0.25rem;
+  background: #0f2847;
+  border: 1px solid #3a5a80;
+  border-radius: 4px;
+  color: #e0e8f0;
+  font-size: 0.85rem;
+}
+
+.panel .limit-hint {
+  font-size: 0.85rem;
+  color: #81d4fa;
+  margin-bottom: 0.5rem;
+}
+
+.friends-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.friends-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #2a4a6a;
+}
+
+.friends-list li:last-child {
+  border-bottom: none;
+}
+
+.friends-list button {
+  padding: 0.3rem 0.6rem;
+  margin-left: 0.25rem;
+  background: #1a4a7a;
+  border: none;
+  border-radius: 4px;
+  color: #e0e8f0;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.friends-list input {
+  padding: 0.35rem 0.5rem;
+  margin-right: 0.5rem;
+  width: 180px;
+  background: #0f2847;
+  border: 1px solid #3a5a80;
+  border-radius: 4px;
+  color: #e0e8f0;
+}
+
+.friends-list .section {
+  margin-bottom: 1rem;
+}
+
+.friends-list .section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.upgrade-panel p {
+  margin: 0 0 0.5rem;
+  color: #9ab8d8;
+}
+
+.upgrade-panel button {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #1e88e5;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.upgrade-panel button:disabled {
+  background: #3a5a80;
+  cursor: not-allowed;
+}
+
+.panel label {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #9ab8d8;
+}
+
+.panel label input {
+  margin-left: 0.25rem;
+  padding: 0.25rem;
+  width: 70px;
+  background: #0f2847;
+  border: 1px solid #3a5a80;
+  border-radius: 4px;
+  color: #e0e8f0;
+}
+
+.daily-credit-banner {
+  background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%);
+  color: #fff;
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.daily-credit-banner button {
+  margin-left: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.5);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
